@@ -1,7 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
     const patientsTableBody = document.getElementById('patientsTableBody');
     const searchInput = document.getElementById('searchInput');
-    const paginationContainer = document.querySelector('#pagination > div');
+    const paginationContainer = document.getElementById('pagination');
     const recordsInfo = document.getElementById('recordsInfo');
     const editPatientModal = document.getElementById('editPatientModal');
     const editPatientForm = document.getElementById('editPatientForm');
@@ -18,6 +18,23 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             showLoading();
             
+            // Build the query object
+            const query = {};
+            
+            if (search) {
+                // Handle gender search specifically
+                if (['male', 'female', 'other'].includes(search)) {
+                    query.gender = { $regex: new RegExp(`^${search}$`, 'i') };
+                } else {
+                    // For other searches, look in name and disease fields
+                    const searchRegex = new RegExp(search, 'i');
+                    query.$or = [
+                        { name: searchRegex },
+                        { disease: searchRegex }
+                    ];
+                }
+            }
+    
             const response = await fetch(`/all-patients?page=${page}&limit=${itemsPerPage}&search=${encodeURIComponent(search)}`);
             const data = await response.json();
             
@@ -49,9 +66,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // Show loading state
     function showLoading() {
         loadingIndicator.classList.remove('hidden');
-        patientsTableBody.innerHTML = '';
-        paginationContainer.innerHTML = '';
-        recordsInfo.textContent = '';
+  loadingIndicator.innerHTML = `
+    <div class="flex flex-col items-center">
+      <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-500 mb-4"></div>
+      <p class="text-gray-600">Loading patient records...</p>
+      <p class="text-sm text-gray-400 mt-2">Please wait</p>
+    </div>
+  `;
     }
 
     // Hide loading state
@@ -135,81 +156,59 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Setup pagination
     function setupPagination(total, currentPage, totalPages) {
+        const paginationDiv = document.getElementById('pagination');
         paginationContainer.innerHTML = '';
         
-        // Previous button
-        const prevButton = document.createElement('button');
-        prevButton.innerHTML = '<i class="fas fa-chevron-left"></i>';
-        prevButton.className = `px-3 py-1 rounded-md ${currentPage === 1 ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`;
-        prevButton.disabled = currentPage === 1;
-        prevButton.addEventListener('click', () => {
-            if (currentPage > 1) {
-                currentPage--;
-                fetchPatients(currentPage, currentSearch);
-            }
-        });
-        paginationContainer.appendChild(prevButton);
-
-        // Page numbers - show first, current-2 to current+2, and last
-        const maxVisiblePages = 5;
-        let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
-        let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
-
-        if (endPage - startPage + 1 < maxVisiblePages) {
-            startPage = Math.max(1, endPage - maxVisiblePages + 1);
+        // Create container for buttons
+    const buttonsContainer = document.createElement('div');
+    buttonsContainer.className = 'flex space-x-2';
+    
+    // Previous button
+    const prevButton = document.createElement('button');
+    prevButton.innerHTML = '<i class="fas fa-chevron-left"></i>';
+    prevButton.className = `px-3 py-1 rounded-md ${currentPage === 1 ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`;
+    prevButton.disabled = currentPage === 1;
+    prevButton.addEventListener('click', () => {
+        if (currentPage > 1) {
+            currentPage--;
+            fetchPatients(currentPage, currentSearch);
         }
+    });
+    buttonsContainer.appendChild(prevButton);
 
-        if (startPage > 1) {
-            const firstPageButton = createPageButton(1, currentPage);
-            paginationContainer.appendChild(firstPageButton);
-            if (startPage > 2) {
-                const ellipsis = document.createElement('span');
-                ellipsis.className = 'px-2 py-1';
-                ellipsis.textContent = '...';
-                paginationContainer.appendChild(ellipsis);
-            }
-        }
-
-        for (let i = startPage; i <= endPage; i++) {
-            const pageButton = createPageButton(i, currentPage);
-            paginationContainer.appendChild(pageButton);
-        }
-
-        if (endPage < totalPages) {
-            if (endPage < totalPages - 1) {
-                const ellipsis = document.createElement('span');
-                ellipsis.className = 'px-2 py-1';
-                ellipsis.textContent = '...';
-                paginationContainer.appendChild(ellipsis);
-            }
-            const lastPageButton = createPageButton(totalPages, currentPage);
-            paginationContainer.appendChild(lastPageButton);
-        }
-
-        // Next button
-        const nextButton = document.createElement('button');
-        nextButton.innerHTML = '<i class="fas fa-chevron-right"></i>';
-        nextButton.className = `px-3 py-1 rounded-md ${currentPage === totalPages ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`;
-        nextButton.disabled = currentPage === totalPages;
-        nextButton.addEventListener('click', () => {
-            if (currentPage < totalPages) {
-                currentPage++;
-                fetchPatients(currentPage, currentSearch);
-            }
-        });
-        paginationContainer.appendChild(nextButton);
-    }
-
-    // Create a page button
-    function createPageButton(pageNumber, currentPage) {
-        const button = document.createElement('button');
-        button.textContent = pageNumber;
-        button.className = `px-3 py-1 mx-1 rounded-md ${pageNumber === currentPage ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`;
-        button.addEventListener('click', () => {
-            currentPage = pageNumber;
+    // Page numbers
+    for (let i = 1; i <= totalPages; i++) {
+        const pageButton = document.createElement('button');
+        pageButton.textContent = i;
+        pageButton.className = `px-3 py-1 rounded-md ${i === currentPage ? 'bg-green-500 text-white' : 'bg-gray-200 hover:bg-gray-300'}`;
+        pageButton.addEventListener('click', () => {
+            currentPage = i;
             fetchPatients(currentPage, currentSearch);
         });
-        return button;
+        buttonsContainer.appendChild(pageButton);
+    }
+
+    // Next button
+    const nextButton = document.createElement('button');
+    nextButton.innerHTML = '<i class="fas fa-chevron-right"></i>';
+    nextButton.className = `px-3 py-1 rounded-md ${currentPage === totalPages ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`;
+    nextButton.disabled = currentPage === totalPages;
+    nextButton.addEventListener('click', () => {
+        if (currentPage < totalPages) {
+            currentPage++;
+            fetchPatients(currentPage, currentSearch);
+        }
+    });
+    buttonsContainer.appendChild(nextButton);
+
+    // Add buttons to pagination div
+    paginationDiv.appendChild(buttonsContainer);
+
+    // Records info
+    const infoDiv = document.createElement('div');
+    infoDiv.className = 'text-sm text-gray-600 mt-2';
+    infoDiv.textContent = `Total records: ${total}`;
+    paginationDiv.appendChild(infoDiv);
     }
 
     // Update records info
@@ -222,12 +221,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // Search functionality
     let searchTimeout;
     searchInput.addEventListener('input', (e) => {
-        clearTimeout(searchTimeout);
-        currentSearch = e.target.value;
-        currentPage = 1;
-        searchTimeout = setTimeout(() => {
-            fetchPatients(currentPage, currentSearch);
-        }, 500);
+    clearTimeout(searchTimeout);
+    currentSearch = e.target.value.trim().toLowerCase();
+    currentPage = 1;
+    
+    searchTimeout = setTimeout(() => {
+        fetchPatients(currentPage, currentSearch);
+    }, 500);
     });
 
     // View patient details
